@@ -36,6 +36,7 @@ def check_c_declarations_pxd(module_node):
 
 
 def check_c_declarations(module_node):
+    error("just a test")
     module_node.scope.check_c_classes()
     module_node.scope.check_c_functions()
     return module_node
