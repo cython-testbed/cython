@@ -282,9 +282,12 @@ static CYTHON_INLINE PyObject *__Pyx_GetItemInt_{{type}}_Fast(PyObject *o, Py_ss
                                                               CYTHON_NCP_UNUSED int wraparound,
                                                               CYTHON_NCP_UNUSED int boundscheck) {
 #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
-    if (wraparound & unlikely(i < 0)) i += Py{{type}}_GET_SIZE(o);
-    if ((!boundscheck) || likely((0 <= i) & (i < Py{{type}}_GET_SIZE(o)))) {
-        PyObject *r = Py{{type}}_GET_ITEM(o, i);
+    Py_ssize_t wrapped_i = i;
+    if (wraparound & unlikely(i < 0)) {
+        wrapped_i += Py{{type}}_GET_SIZE(o);
+    }
+    if ((!boundscheck) || likely((0 <= wrapped_i) & (wrapped_i < Py{{type}}_GET_SIZE(o)))) {
+        PyObject *r = Py{{type}}_GET_ITEM(o, wrapped_i);
         Py_INCREF(r);
         return r;
     }
@@ -1126,7 +1129,7 @@ static int __Pyx_TryUnpackUnboundCMethod(__Pyx_CachedCFunction* target) {
     {
         PyMethodDescrObject *descr = (PyMethodDescrObject*) method;
         target->func = descr->d_method->ml_meth;
-        target->flag = descr->d_method->ml_flags & (METH_VARARGS | METH_KEYWORDS | METH_O | METH_NOARGS);
+        target->flag = descr->d_method->ml_flags & ~(METH_CLASS | METH_STATIC | METH_COEXIST);
     }
 #endif
     return 0;
@@ -1142,7 +1145,9 @@ static PyObject* __Pyx__CallUnboundCMethod0(__Pyx_CachedCFunction* cfunc, PyObje
     ((likely((cfunc)->func)) ? \
         (likely((cfunc)->flag == METH_NOARGS) ?  (*((cfunc)->func))(self, NULL) : \
          (likely((cfunc)->flag == (METH_VARARGS | METH_KEYWORDS)) ?  ((*(PyCFunctionWithKeywords)(cfunc)->func)(self, $empty_tuple, NULL)) : \
-             ((cfunc)->flag == METH_VARARGS ?  (*((cfunc)->func))(self, $empty_tuple) : __Pyx__CallUnboundCMethod0(cfunc, self)))) : \
+             ((cfunc)->flag == METH_VARARGS ?  (*((cfunc)->func))(self, $empty_tuple) : \
+              (PY_VERSION_HEX >= 0x030600B1 && (cfunc)->flag == METH_FASTCALL ?  (*(__Pyx_PyCFunctionFast)(cfunc)->func)(self, &PyTuple_GET_ITEM($empty_tuple, 0), 0, NULL) : \
+                __Pyx__CallUnboundCMethod0(cfunc, self))))) : \
         __Pyx__CallUnboundCMethod0(cfunc, self))
 #else
 #define __Pyx_CallUnboundCMethod0(cfunc, self)  __Pyx__CallUnboundCMethod0(cfunc, self)
@@ -1178,7 +1183,9 @@ static PyObject* __Pyx__CallUnboundCMethod1(__Pyx_CachedCFunction* cfunc, PyObje
 #if CYTHON_COMPILING_IN_CPYTHON
 #define __Pyx_CallUnboundCMethod1(cfunc, self, arg)  \
     ((likely((cfunc)->func && (cfunc)->flag == METH_O)) ? (*((cfunc)->func))(self, arg) : \
-        __Pyx__CallUnboundCMethod1(cfunc, self, arg))
+        ((PY_VERSION_HEX >= 0x030600B1 && (cfunc)->func && (cfunc)->flag == METH_FASTCALL) ? \
+            (*(__Pyx_PyCFunctionFast)(cfunc)->func)(self, &arg, 1, NULL) : \
+        __Pyx__CallUnboundCMethod1(cfunc, self, arg)))
 #else
 #define __Pyx_CallUnboundCMethod1(cfunc, self, arg)  __Pyx__CallUnboundCMethod1(cfunc, self, arg)
 #endif
@@ -1259,6 +1266,7 @@ static PyObject* __Pyx_PyObject_CallMethod1(PyObject* obj, PyObject* method_name
 //@requires: PyObjectGetAttrStr
 //@requires: PyObjectCallOneArg
 //@requires: PyFunctionFastCall
+//@requires: PyCFunctionFastCall
 
 static PyObject* __Pyx_PyObject_CallMethod1(PyObject* obj, PyObject* method_name, PyObject* arg) {
     PyObject *method, *result = NULL;
@@ -1274,6 +1282,13 @@ static PyObject* __Pyx_PyObject_CallMethod1(PyObject* obj, PyObject* method_name
             if (PyFunction_Check(function)) {
                 PyObject *args[2] = {self, arg};
                 result = __Pyx_PyFunction_FastCall(function, args, 2);
+                goto done;
+            }
+            #endif
+            #if CYTHON_FAST_PYCCALL
+            if (__Pyx_PyFastCFunction_Check(function)) {
+                PyObject *args[2] = {self, arg};
+                result = __Pyx_PyCFunction_FastCall(function, args, 2);
                 goto done;
             }
             #endif
@@ -1307,6 +1322,7 @@ static PyObject* __Pyx_PyObject_CallMethod2(PyObject* obj, PyObject* method_name
 //@requires: PyObjectGetAttrStr
 //@requires: PyObjectCall
 //@requires: PyFunctionFastCall
+//@requires: PyCFunctionFastCall
 
 static PyObject* __Pyx_PyObject_CallMethod2(PyObject* obj, PyObject* method_name, PyObject* arg1, PyObject* arg2) {
     PyObject *args, *method, *result = NULL;
@@ -1319,6 +1335,13 @@ static PyObject* __Pyx_PyObject_CallMethod2(PyObject* obj, PyObject* method_name
         function = PyMethod_GET_FUNCTION(method);
         #if CYTHON_FAST_PYCALL
         if (PyFunction_Check(function)) {
+            PyObject *args[3] = {self, arg1, arg2};
+            result = __Pyx_PyFunction_FastCall(function, args, 3);
+            goto done;
+        }
+        #endif
+        #if CYTHON_FAST_PYCCALL
+        if (__Pyx_PyFastCFunction_Check(function)) {
             PyObject *args[3] = {self, arg1, arg2};
             result = __Pyx_PyFunction_FastCall(function, args, 3);
             goto done;
@@ -1341,6 +1364,13 @@ static PyObject* __Pyx_PyObject_CallMethod2(PyObject* obj, PyObject* method_name
     if (PyFunction_Check(method)) {
         PyObject *args[2] = {arg1, arg2};
         result = __Pyx_PyFunction_FastCall(method, args, 2);
+        goto done;
+    } else
+#endif
+#if CYTHON_FAST_PYCCALL
+    if (__Pyx_PyFastCFunction_Check(method)) {
+        PyObject *args[2] = {arg1, arg2};
+        result = __Pyx_PyCFunction_FastCall(method, args, 2);
         goto done;
     } else
 #endif
@@ -1593,8 +1623,39 @@ done:
     Py_LeaveRecursiveCall();
     return result;
 }
-#endif  // CPython < 3.6
-#endif  // CYTHON_FAST_PYCALL
+#endif  /* CPython < 3.6 */
+#endif  /* CYTHON_FAST_PYCALL */
+
+
+/////////////// PyCFunctionFastCall.proto ///////////////
+
+#if CYTHON_FAST_PYCCALL
+static CYTHON_INLINE PyObject *__Pyx_PyCFunction_FastCall(PyObject *func, PyObject **args, Py_ssize_t nargs);
+#else
+#define __Pyx_PyCFunction_FastCall(func, args, nargs)  (assert(0), NULL)
+#endif
+
+/////////////// PyCFunctionFastCall ///////////////
+
+#if CYTHON_FAST_PYCCALL
+static CYTHON_INLINE PyObject * __Pyx_PyCFunction_FastCall(PyObject *func_obj, PyObject **args, Py_ssize_t nargs) {
+    PyCFunctionObject *func = (PyCFunctionObject*)func_obj;
+    PyCFunction meth = PyCFunction_GET_FUNCTION(func);
+    PyObject *self = PyCFunction_GET_SELF(func);
+
+    assert(PyCFunction_Check(func));
+    assert(METH_FASTCALL == (PyCFunction_GET_FLAGS(func) & ~(METH_CLASS | METH_STATIC | METH_COEXIST)));
+    assert(nargs >= 0);
+    assert(nargs == 0 || args != NULL);
+
+    /* _PyCFunction_FastCallDict() must not be called with an exception set,
+       because it may clear it (directly or indirectly) and so the
+       caller loses its exception */
+    assert(!PyErr_Occurred());
+
+    return (*((__Pyx_PyCFunctionFast)meth)) (self, args, nargs, NULL);
+}
+#endif  /* CYTHON_FAST_PYCCALL */
 
 
 /////////////// PyObjectCallOneArg.proto ///////////////
@@ -1605,6 +1666,7 @@ static CYTHON_INLINE PyObject* __Pyx_PyObject_CallOneArg(PyObject *func, PyObjec
 //@requires: PyObjectCallMethO
 //@requires: PyObjectCall
 //@requires: PyFunctionFastCall
+//@requires: PyCFunctionFastCall
 
 #if CYTHON_COMPILING_IN_CPYTHON
 static PyObject* __Pyx__PyObject_CallOneArg(PyObject *func, PyObject *arg) {
@@ -1632,6 +1694,10 @@ static CYTHON_INLINE PyObject* __Pyx_PyObject_CallOneArg(PyObject *func, PyObjec
         if (likely(PyCFunction_GET_FLAGS(func) & METH_O)) {
             // fast and simple case that we are optimising for
             return __Pyx_PyObject_CallMethO(func, arg);
+#if CYTHON_FAST_PYCCALL
+        } else if (PyCFunction_GET_FLAGS(func) & METH_FASTCALL) {
+            return __Pyx_PyCFunction_FastCall(func, &arg, 1);
+#endif
         }
     }
     return __Pyx__PyObject_CallOneArg(func, arg);
@@ -1701,6 +1767,7 @@ static PyObject* __Pyx_PyNumber_InPlaceMatrixMultiply(PyObject* x, PyObject* y);
 //@requires: PyObjectGetAttrStr
 //@requires: PyObjectCallOneArg
 //@requires: PyFunctionFastCall
+//@requires: PyCFunctionFastCall
 
 #if PY_VERSION_HEX < 0x03050000
 static PyObject* __Pyx_PyObject_CallMatrixMethod(PyObject* method, PyObject* arg) {
@@ -1716,6 +1783,13 @@ static PyObject* __Pyx_PyObject_CallMatrixMethod(PyObject* method, PyObject* arg
             if (PyFunction_Check(function)) {
                 PyObject *args[2] = {self, arg};
                 result = __Pyx_PyFunction_FastCall(function, args, 2);
+                goto done;
+            }
+            #endif
+            #if CYTHON_FAST_PYCCALL
+            if (__Pyx_PyFastCFunction_Check(function)) {
+                PyObject *args[2] = {self, arg};
+                result = __Pyx_PyCFunction_FastCall(function, args, 2);
                 goto done;
             }
             #endif

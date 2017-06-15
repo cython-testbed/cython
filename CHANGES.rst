@@ -2,7 +2,99 @@
 Cython Changelog
 ================
 
-0.25 (2016-??-??)
+
+latest
+===================
+
+Features added
+--------------
+
+* Speed up comparisons of strings if their hash value is available.
+  Patch by Claudio Freire (Github issue #1571).
+
+* Support pyximport from zip files.
+  Patch by Sergei Lebedev (Github issue #1485).
+
+* IPython magic now respects `__all__` variable.  Also skips
+  leading-underscore values (like `import *`).
+  Patch by Syrtis Major (Github issue #1625).
+
+* ``abs()`` is optimised for C complex numbers.
+  Patch by da-woods (Github issue #1648).
+
+* cdef classes now support pickling by default when possible.
+
+* The display of C lines in Cython tracebacks is now settable at runtime
+  via `import cython_runtime; cython_runtime.cline_in_traceback=True`.
+  The default has been changed to False.
+
+Bugs fixed
+----------
+
+* Item lookup/assignment with a unicode character as index that is typed
+  (explicitly or implicitly) as ``Py_UCS4`` or ``Py_UNICODE`` used the
+  integer value instead of the Unicode string value. Code that relied on
+  the previous behaviour now triggers a warning that can be disabled by
+  applying an explicit cast. (Github issue #1602)
+
+* f-string processing was adapted to match recent changes in PEP 498 and
+  CPython 3.6.
+
+* Invalid C code when decoding from UTF-16(LE/BE) byte strings.
+  (Github issue #1696)
+
+* Unicode escapes in 'ur' raw-unicode strings were not resolved in Py2 code.
+  Original patch by Aaron Gallagher (Github issue #1594).
+
+* File paths of code objects are now relative.
+  Original patch by Jelmer Vernooij (Github issue #1565).
+
+Other changes
+-------------
+
+* The `unraisable_tracebacks` now defaults to `True`.
+
+* Coercion of C++ containers to Python is no longer automatic on attribute
+  access (Github issue #1521).
+
+
+0.25.2 (2016-12-08)
+===================
+
+Bugs fixed
+----------
+
+* Fixes several issues with C++ template deduction.
+
+* Fixes a issue with bound method type inference (Github issue #551).
+
+* Fixes a bug with cascaded tuple assignment (Github issue #1523).
+
+* Fixed or silenced many Clang warnings.
+
+* Fixes bug with powers of pure real complex numbers (Github issue #1538).
+
+
+0.25.1 (2016-10-26)
+===================
+
+Bugs fixed
+----------
+
+* Fixes a bug with ``isinstance(o, Exception)`` (Github issue #1496).
+
+* Fixes bug with ``cython.view.array`` missing utility code in some cases
+  (Github issue #1502).
+
+Other changes
+-------------
+
+* The distutils extension ``Cython.Distutils.build_ext`` has been reverted,
+  temporarily, to be ``old_build_ext`` to give projects time to migrate.
+  The new build_ext is available as ``new_build_ext``.
+
+
+0.25 (2016-10-25)
 =================
 
 Features added
@@ -11,6 +103,13 @@ Features added
 * def/cpdef methods of cdef classes benefit from Cython's internal function
   implementation, which enables introspection and line profiling for them.
   Implementation sponsored by Turbostream (www.turbostream-cfd.com).
+
+* Calls to Python functions are faster, following the recent "FastCall"
+  optimisations that Victor Stinner implemented for CPython 3.6.
+  See https://bugs.python.org/issue27128 and related issues.
+
+* The new METH_FASTCALL calling convention for PyCFunctions is supported
+  in CPython 3.6.  See https://bugs.python.org/issue27810
 
 * Initial support for using Cython modules in Pyston.  Patch by Daetalus.
 
@@ -42,8 +141,12 @@ Features added
 
 * Some integer operations on Python long objects are faster in Python 2.7.
 
-Bugs fixed
-----------
+* Support for the C++ ``typeid`` operator.
+
+* Support for bazel using a the pyx_library rule in //Tools:rules.bzl.
+
+Significant Bugs fixed
+----------------------
 
 * Division of complex numbers avoids overflow by using Smith's method.
 
@@ -57,7 +160,12 @@ Other changes
   the current jupyter kernel.  The language level can be set explicitly with
   "%%cython -2" or "%%cython -3".
 
-* Usage of ``Cython.Distutils.build_ext`` is now discouraged.
+* The distutils extension ``Cython.Distutils.build_ext`` has now been updated
+  to use cythonize which properly handles dependencies.  The old extension can
+  still be found in ``Cython.Distutils.old_build_ext`` and is now deprecated.
+
+* ``directive_defaults`` is no longer available in ``Cython.Compiler.Options``,
+  use ``get_directive_defaults()`` instead.
 
 
 0.24.1 (2016-07-15)

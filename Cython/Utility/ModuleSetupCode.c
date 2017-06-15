@@ -24,6 +24,16 @@
   #define DL_EXPORT(t) t
 #endif
 
+// For use in DL_IMPORT/DL_EXPORT macros.
+#define __PYX_COMMA ,
+
+#ifndef HAVE_LONG_LONG
+  // CPython has required PY_LONG_LONG support for years, even if HAVE_LONG_LONG is not defined for us
+  #if PY_VERSION_HEX >= 0x03030000 || (PY_MAJOR_VERSION == 2 && PY_VERSION_HEX >= 0x02070000)
+    #define HAVE_LONG_LONG
+  #endif
+#endif
+
 #ifndef PY_LONG_LONG
   #define PY_LONG_LONG LONG_LONG
 #endif
@@ -142,6 +152,10 @@
   #endif
 #endif
 
+#if !defined(CYTHON_FAST_PYCCALL)
+#define CYTHON_FAST_PYCCALL  (CYTHON_FAST_PYCALL && PY_VERSION_HEX >= 0x030600B1)
+#endif
+
 #if CYTHON_USE_PYLONG_INTERNALS
   #include "longintrepr.h"
   /* These short defines can easily conflict with other code */
@@ -180,6 +194,21 @@
 #endif
 #ifndef Py_TPFLAGS_HAVE_FINALIZE
   #define Py_TPFLAGS_HAVE_FINALIZE 0
+#endif
+
+#ifndef METH_FASTCALL
+  // new in CPython 3.6
+  #define METH_FASTCALL 0x80
+  typedef PyObject *(*__Pyx_PyCFunctionFast) (PyObject *self, PyObject **args,
+                                              Py_ssize_t nargs, PyObject *kwnames);
+#else
+  #define __Pyx_PyCFunctionFast _PyCFunctionFast
+#endif
+#if CYTHON_FAST_PYCCALL
+#define __Pyx_PyFastCFunction_Check(func) \
+    ((PyCFunction_Check(func) && (METH_FASTCALL == (PyCFunction_GET_FLAGS(func) & ~(METH_CLASS | METH_STATIC | METH_COEXIST)))))
+#else
+#define __Pyx_PyFastCFunction_Check(func) 0
 #endif
 
 /* new Py3.3 unicode type (PEP 393) */
@@ -282,6 +311,7 @@
 #endif
 
 #define __Pyx_TypeCheck(obj, type) PyObject_TypeCheck(obj, (PyTypeObject *)type)
+#define __Pyx_PyException_Check(obj) __Pyx_TypeCheck(obj, PyExc_Exception)
 
 #if PY_MAJOR_VERSION >= 3
   #define PyIntObject                  PyLongObject
@@ -357,6 +387,37 @@
   #endif
 #endif
 
+// unused attribute
+#ifndef CYTHON_UNUSED
+# if defined(__GNUC__)
+#   if !(defined(__cplusplus)) || (__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4))
+#     define CYTHON_UNUSED __attribute__ ((__unused__))
+#   else
+#     define CYTHON_UNUSED
+#   endif
+# elif defined(__ICC) || (defined(__INTEL_COMPILER) && !defined(_MSC_VER))
+#   define CYTHON_UNUSED __attribute__ ((__unused__))
+# else
+#   define CYTHON_UNUSED
+# endif
+#endif
+
+#ifndef CYTHON_MAYBE_UNUSED_VAR
+#  if defined(__cplusplus)
+     template<class T> void CYTHON_MAYBE_UNUSED_VAR( const T& ) { }
+#  else
+#    define CYTHON_MAYBE_UNUSED_VAR(x) (void)(x)
+#  endif
+#endif
+
+#ifndef CYTHON_NCP_UNUSED
+# if CYTHON_COMPILING_IN_CPYTHON
+#  define CYTHON_NCP_UNUSED
+# else
+#  define CYTHON_NCP_UNUSED CYTHON_UNUSED
+# endif
+#endif
+
 #define __Pyx_void_to_None(void_result) ((void)(void_result), Py_INCREF(Py_None), Py_None)
 
 
@@ -364,7 +425,9 @@
 
 // inline attribute
 #ifndef CYTHON_INLINE
-  #if defined(__GNUC__)
+  #if defined(__clang__)
+    #define CYTHON_INLINE __inline__ __attribute__ ((__unused__))
+  #elif defined(__GNUC__)
     #define CYTHON_INLINE __inline__
   #elif defined(_MSC_VER)
     #define CYTHON_INLINE __inline
@@ -384,7 +447,11 @@
 
 // inline attribute
 #ifndef CYTHON_INLINE
-  #define CYTHON_INLINE inline
+  #if defined(__clang__)
+    #define CYTHON_INLINE __inline__ __attribute__ ((__unused__))
+  #else
+    #define CYTHON_INLINE inline
+  #endif
 #endif
 
 // Work around clang bug http://stackoverflow.com/questions/21847816/c-invoke-nested-template-class-destructor
@@ -402,7 +469,11 @@ class __Pyx_FakeReference {
     // Const version needed as Cython doesn't know about const overloads (e.g. for stl containers).
     __Pyx_FakeReference(const T& ref) : ptr(const_cast<T*>(&ref)) { }
     T *operator->() { return ptr; }
+    T *operator&() { return ptr; }
     operator T&() { return *ptr; }
+    // TODO(robertwb): Delegate all operators (or auto-generate unwrapping code where needed).
+    template<typename U> bool operator ==(U other) { return *ptr == other; }
+    template<typename U> bool operator !=(U other) { return *ptr != other; }
   private:
     T *ptr;
 };
@@ -436,29 +507,6 @@ static CYTHON_INLINE float __PYX_NAN() {
 
 
 /////////////// UtilityFunctionPredeclarations.proto ///////////////
-
-/* unused attribute */
-#ifndef CYTHON_UNUSED
-# if defined(__GNUC__)
-#   if !(defined(__cplusplus)) || (__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4))
-#     define CYTHON_UNUSED __attribute__ ((__unused__))
-#   else
-#     define CYTHON_UNUSED
-#   endif
-# elif defined(__ICC) || (defined(__INTEL_COMPILER) && !defined(_MSC_VER))
-#   define CYTHON_UNUSED __attribute__ ((__unused__))
-# else
-#   define CYTHON_UNUSED
-# endif
-#endif
-
-#ifndef CYTHON_NCP_UNUSED
-# if CYTHON_COMPILING_IN_CPYTHON
-#  define CYTHON_NCP_UNUSED
-# else
-#  define CYTHON_NCP_UNUSED CYTHON_UNUSED
-# endif
-#endif
 
 typedef struct {PyObject **p; const char *s; const Py_ssize_t n; const char* encoding;
                 const char is_unicode; const char is_str; const char intern; } __Pyx_StringTabEntry; /*proto*/

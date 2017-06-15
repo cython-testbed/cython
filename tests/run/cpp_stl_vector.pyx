@@ -5,6 +5,7 @@ from cython.operator cimport dereference as d
 from cython.operator cimport preincrement as incr
 
 from libcpp.vector cimport vector
+from libcpp cimport bool as cbool
 
 def simple_test(double x):
     """
@@ -146,3 +147,66 @@ def test_value_type(x):
     """
     cdef vector[double].value_type val = x
     return val
+
+def test_value_type_complex(x):
+    """
+    >>> test_value_type_complex(2)
+    (2+0j)
+    """
+    cdef vector[double complex].value_type val = x
+    return val
+
+def test_bool_vector_convert(o):
+    """
+    >>> test_bool_vector_convert([True, False, None, 3])
+    [True, False, False, True]
+    """
+    cdef vector[cbool] v = o
+    return v
+
+def test_bool_vector_get_set():
+    """
+    >>> test_bool_vector_get_set()
+    """
+    cdef vector[cbool] v = range(5)
+    # Test access.
+    assert not v[0], v
+    assert v[1], v
+    assert not v.at(0), v
+    assert v.at(1), v
+    v[0] = True
+    v[1] = False
+    assert <object>v == [True, False, True, True, True]
+
+ctypedef vector[cbool] vector_bool
+ctypedef vector[int] vector_int
+
+def test_typedef_vector(L):
+    """
+    >>> test_typedef_vector([0, 1, True])
+    ([0, 1, 1, 0, 1, 1], 0, [False, True, True, False, True, True], False)
+    """
+    cdef vector_int vi = L
+    cdef vector_int vi2 = vi
+    vi.insert(vi.begin(), vi2.begin(), vi2.end())
+
+    cdef vector_bool vb = L
+    cdef vector_bool vb2 = vb
+    vb.insert(vb.begin(), vb2.begin(), vb2.end())
+
+    return vi, vi.at(0), vb, vb.at(0)
+
+
+def test_insert():
+    """
+    >>> test_insert()
+    """
+    cdef vector[int] v
+    cdef vector[int].size_type count = 5
+    cdef int value = 0
+
+    v.insert(v.end(), count, value)
+
+    assert v.size() == count
+    for element in v:
+        assert element == value, '%s != %s' % (element, count)

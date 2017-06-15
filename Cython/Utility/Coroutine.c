@@ -139,7 +139,7 @@ static CYTHON_INLINE PyObject* __Pyx_Coroutine_AIter_Yield_From(__pyx_CoroutineO
 #if PY_VERSION_HEX < 0x030500B2
     if (!__Pyx_PyType_AsAsync(source)) {
         #ifdef __Pyx_Coroutine_USED
-        if (!__Pyx_Coroutine_CheckExact(source))  // quickly rule out a likely case
+        if (!__Pyx_Coroutine_CheckExact(source))  /* quickly rule out a likely case */
         #endif
         {
             // same as above in slow
@@ -950,8 +950,11 @@ static void __Pyx_Coroutine_del(PyObject *self) {
 static PyObject *
 __Pyx_Coroutine_get_name(__pyx_CoroutineObject *self)
 {
-    Py_INCREF(self->gi_name);
-    return self->gi_name;
+    PyObject *name = self->gi_name;
+    // avoid NULL pointer dereference during garbage collection
+    if (unlikely(!name)) name = Py_None;
+    Py_INCREF(name);
+    return name;
 }
 
 static int
@@ -978,8 +981,11 @@ __Pyx_Coroutine_set_name(__pyx_CoroutineObject *self, PyObject *value)
 static PyObject *
 __Pyx_Coroutine_get_qualname(__pyx_CoroutineObject *self)
 {
-    Py_INCREF(self->gi_qualname);
-    return self->gi_qualname;
+    PyObject *name = self->gi_qualname;
+    // avoid NULL pointer dereference during garbage collection
+    if (unlikely(!name)) name = Py_None;
+    Py_INCREF(name);
+    return name;
 }
 
 static int
@@ -1186,6 +1192,7 @@ static void __Pyx_Coroutine_check_and_dealloc(PyObject *self) {
         PyObject_GC_UnTrack(self);
 #if PY_VERSION_HEX >= 0x03030000 || defined(PyErr_WarnFormat)
         PyErr_WarnFormat(PyExc_RuntimeWarning, 1, "coroutine '%.50S' was never awaited", gen->gi_qualname);
+        PyErr_Clear();  /* just in case, must not keep a live exception during GC */
 #else
         {PyObject *msg;
         char *cmsg;
